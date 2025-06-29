@@ -22,21 +22,54 @@ const LoginPage = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    // Check if user is already logged in
-    const getSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        navigate('/work-in-progress');
+    // Handle OAuth callback and check existing session
+    const handleAuthCallback = async () => {
+      try {
+        // First, try to get session from URL (for OAuth callback)
+        const { data, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('Error getting session:', error);
+          return;
+        }
+
+        if (data.session) {
+          console.log('User authenticated:', data.session.user);
+          // Clear the URL hash
+          if (window.location.hash) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+          navigate('/work-in-progress');
+          return;
+        }
+
+        // If no session from URL, check for stored session
+        const { data: storedSession } = await supabase.auth.getSession();
+        if (storedSession.session) {
+          navigate('/work-in-progress');
+        }
+
+      } catch (error) {
+        console.error('Auth callback error:', error);
       }
     };
 
-    getSession();
+    handleAuthCallback();
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (session) {
+        console.log('Auth state changed:', event, session?.user?.email);
+        
+        if (event === 'SIGNED_IN' && session) {
+          // Clear URL hash if present
+          if (window.location.hash) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
           navigate('/work-in-progress');
+        } else if (event === 'SIGNED_OUT') {
+          // Handle sign out
+          console.log('User signed out');
         }
       }
     );
@@ -110,17 +143,18 @@ const LoginPage = () => {
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/work-in-progress`
+          redirectTo: `${window.location.origin}/login`
         }
       });
 
       if (error) {
         setError('Error with Google login: ' + error.message);
+        setLoading(false);
       }
+      // Don't set loading to false here - let the auth state change handle it
     } catch (error) {
       setError('An unexpected error occurred with Google login');
       console.error('Google auth error:', error);
-    } finally {
       setLoading(false);
     }
   };
