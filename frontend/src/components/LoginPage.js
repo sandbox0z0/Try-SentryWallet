@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Shield, ArrowLeft, Loader2 } from 'lucide-react';
+import { Shield, ArrowLeft, Loader2, Eye, EyeOff, Mail, Lock, User } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
@@ -12,15 +12,21 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 const LoginPage = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [user, setUser] = useState(null);
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    fullName: ''
+  });
+  const [error, setError] = useState('');
 
   useEffect(() => {
     // Check if user is already logged in
     const getSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        setUser(session.user);
-        navigate('/dashboard');
+        navigate('/work-in-progress');
       }
     };
 
@@ -30,10 +36,7 @@ const LoginPage = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (session) {
-          setUser(session.user);
-          navigate('/dashboard');
-        } else {
-          setUser(null);
+          navigate('/work-in-progress');
         }
       }
     );
@@ -41,23 +44,82 @@ const LoginPage = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
+  const handleInputChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
+    setError(''); // Clear error when user types
+  };
+
+  const handleEmailAuth = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      if (isSignUp) {
+        // Sign up
+        const { data, error } = await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+          options: {
+            data: {
+              full_name: formData.fullName,
+            }
+          }
+        });
+
+        if (error) {
+          setError(error.message);
+        } else if (data.user) {
+          if (data.user.email_confirmed_at) {
+            // User is immediately confirmed
+            navigate('/work-in-progress');
+          } else {
+            // User needs to confirm email
+            setError('Please check your email for confirmation link');
+          }
+        }
+      } else {
+        // Sign in
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: formData.email,
+          password: formData.password,
+        });
+
+        if (error) {
+          setError(error.message);
+        } else if (data.user) {
+          navigate('/work-in-progress');
+        }
+      }
+    } catch (error) {
+      setError('An unexpected error occurred');
+      console.error('Auth error:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleGoogleLogin = async () => {
     try {
       setLoading(true);
+      setError('');
+      
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/dashboard`
+          redirectTo: `${window.location.origin}/work-in-progress`
         }
       });
 
       if (error) {
-        console.error('Error logging in:', error.message);
-        alert('Error logging in: ' + error.message);
+        setError('Error with Google login: ' + error.message);
       }
     } catch (error) {
-      console.error('Error:', error);
-      alert('An unexpected error occurred');
+      setError('An unexpected error occurred with Google login');
+      console.error('Google auth error:', error);
     } finally {
       setLoading(false);
     }
@@ -108,9 +170,9 @@ const LoginPage = () => {
           Back to Home
         </motion.button>
 
-        {/* Login Card */}
+        {/* Login/Signup Card */}
         <motion.div
-          className="neumorphic rounded-3xl p-8 text-center"
+          className="neumorphic rounded-3xl p-8"
           variants={cardVariants}
         >
           {/* Logo */}
@@ -119,17 +181,132 @@ const LoginPage = () => {
           </div>
 
           {/* Title */}
-          <h1 className="text-3xl font-bold text-accent mb-2">
-            Login to SentryWallet
+          <h1 className="text-3xl font-bold text-accent mb-2 text-center">
+            {isSignUp ? 'Create Account' : 'Welcome Back'}
           </h1>
           
-          <p className="text-gray-600 mb-8">
-            Sign in with your Google account to continue.
+          <p className="text-gray-600 mb-8 text-center">
+            {isSignUp 
+              ? 'Create your SentryWallet account to get started' 
+              : 'Sign in to your SentryWallet account'
+            }
           </p>
+
+          {/* Error Message */}
+          {error && (
+            <motion.div
+              className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg mb-6"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              {error}
+            </motion.div>
+          )}
+
+          {/* Email/Password Form */}
+          <form onSubmit={handleEmailAuth} className="space-y-4 mb-6">
+            {isSignUp && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Full Name
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <input
+                    type="text"
+                    name="fullName"
+                    value={formData.fullName}
+                    onChange={handleInputChange}
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-2xl focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all duration-200"
+                    placeholder="Enter your full name"
+                    required={isSignUp}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Email Address
+              </label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-2xl focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all duration-200"
+                  placeholder="Enter your email"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Password
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  name="password"
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-2xl focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition-all duration-200"
+                  placeholder={isSignUp ? "Create a password" : "Enter your password"}
+                  required
+                  minLength={isSignUp ? 6 : undefined}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
+              </div>
+              {isSignUp && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Password must be at least 6 characters long
+                </p>
+              )}
+            </div>
+
+            {/* Submit Button */}
+            <motion.button
+              type="submit"
+              className={`w-full flex items-center justify-center px-6 py-4 rounded-2xl font-semibold transition-all duration-300 ${
+                loading 
+                  ? 'bg-gray-300 cursor-not-allowed' 
+                  : 'bg-primary hover:bg-primary/90 text-white shadow-lg'
+              }`}
+              disabled={loading}
+              whileHover={!loading ? { scale: 1.02 } : {}}
+              whileTap={!loading ? { scale: 0.98 } : {}}
+            >
+              {loading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                isSignUp ? 'Create Account' : 'Sign In'
+              )}
+            </motion.button>
+          </form>
+
+          {/* Divider */}
+          <div className="relative mb-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-300"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-white text-gray-500">OR</span>
+            </div>
+          </div>
 
           {/* Google Login Button */}
           <motion.button
-            className={`w-full flex items-center justify-center px-6 py-4 rounded-2xl font-semibold transition-all duration-300 ${
+            className={`w-full flex items-center justify-center px-6 py-4 rounded-2xl font-semibold transition-all duration-300 mb-6 ${
               loading 
                 ? 'bg-gray-300 cursor-not-allowed' 
                 : 'bg-white hover:bg-gray-50 border-2 border-gray-200 hover:border-primary'
@@ -166,8 +343,26 @@ const LoginPage = () => {
             )}
           </motion.button>
 
+          {/* Toggle Login/Signup */}
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={() => {
+                setIsSignUp(!isSignUp);
+                setError('');
+                setFormData({ email: '', password: '', fullName: '' });
+              }}
+              className="text-primary hover:text-primary/80 font-medium transition-colors duration-300"
+            >
+              {isSignUp 
+                ? 'Already have an account? Sign In' 
+                : "Don't have an account? Sign Up"
+              }
+            </button>
+          </div>
+
           {/* Security Note */}
-          <div className="mt-6 text-sm text-gray-500 leading-relaxed">
+          <div className="mt-6 text-sm text-gray-500 leading-relaxed text-center">
             <Shield className="w-4 h-4 inline mr-1" />
             Your account is secured with industry-standard encryption and social recovery features.
           </div>
