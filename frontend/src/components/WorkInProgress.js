@@ -16,21 +16,27 @@ const WorkInProgress = () => {
 
   useEffect(() => {
     const getUser = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      
-      if (error) {
-        console.error('Error getting session:', error);
-        navigate('/login');
-        return;
-      }
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('Error getting session:', error);
+          navigate('/login');
+          return;
+        }
 
-      if (!session) {
-        navigate('/login');
-        return;
-      }
+        if (!session) {
+          navigate('/login');
+          return;
+        }
 
-      setUser(session.user);
-      setLoading(false);
+        console.log('User authenticated in WorkInProgress:', session.user);
+        setUser(session.user);
+        setLoading(false);
+      } catch (error) {
+        console.error('Error in getUser:', error);
+        navigate('/login');
+      }
     };
 
     getUser();
@@ -38,6 +44,7 @@ const WorkInProgress = () => {
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log('Auth state change in WorkInProgress:', event);
         if (!session) {
           navigate('/login');
         } else {
