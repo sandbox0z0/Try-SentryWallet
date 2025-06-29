@@ -103,6 +103,86 @@ const HomePage = () => {
         <div className="absolute bottom-1/4 left-1/3 w-4 h-4 bg-primary/40 rounded-full animate-float-delayed-2"></div>
       </motion.div>
 
+      {/* What Makes SentryWallet Different Section */}
+      <motion.div 
+        className="py-20 px-4 bg-gradient-to-r from-primary/5 to-accent/5"
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true }}
+        variants={containerVariants}
+      >
+        <div className="max-w-4xl mx-auto">
+          <motion.h2 
+            className="text-4xl md:text-5xl font-bold text-center text-accent mb-16"
+            variants={itemVariants}
+          >
+            💡 What Makes SentryWallet Different
+          </motion.h2>
+
+          <motion.div 
+            className="prose prose-lg max-w-none text-gray-700 leading-relaxed"
+            variants={itemVariants}
+          >
+            <p className="text-xl mb-6 font-medium text-accent">
+              SentryWallet is not just a crypto wallet — it's a smart wallet designed for real people.
+            </p>
+
+            <div className="space-y-6 text-lg">
+              <div className="flex items-start space-x-4">
+                <div className="w-6 h-6 bg-primary rounded-full flex-shrink-0 mt-1 flex items-center justify-center">
+                  <div className="w-2 h-2 bg-white rounded-full"></div>
+                </div>
+                <p>
+                  <strong>No seed phrases, no panic.</strong> Users can log in with Google and set trusted "guardians" (friends/family) to recover access if they lose their device.
+                </p>
+              </div>
+
+              <div className="flex items-start space-x-4">
+                <div className="w-6 h-6 bg-primary rounded-full flex-shrink-0 mt-1 flex items-center justify-center">
+                  <div className="w-2 h-2 bg-white rounded-full"></div>
+                </div>
+                <p>
+                  <strong>Gasless transactions.</strong> The wallet runs on BlockDAG, an ultra-fast Layer 1 chain, and uses gasless meta-transactions so users don't even need tokens to interact.
+                </p>
+              </div>
+
+              <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-8 my-8 border border-gray-200">
+                <h3 className="text-2xl font-bold text-accent mb-4">This solves two huge problems in crypto:</h3>
+                <div className="space-y-4">
+                  <div className="flex items-start space-x-4">
+                    <div className="w-6 h-6 bg-red-500 rounded-full flex-shrink-0 mt-1 flex items-center justify-center">
+                      <div className="w-2 h-2 bg-white rounded-full"></div>
+                    </div>
+                    <p><strong>People forgetting seed phrases</strong> (and losing funds forever)</p>
+                  </div>
+                  <div className="flex items-start space-x-4">
+                    <div className="w-6 h-6 bg-red-500 rounded-full flex-shrink-0 mt-1 flex items-center justify-center">
+                      <div className="w-2 h-2 bg-white rounded-full"></div>
+                    </div>
+                    <p><strong>Users stuck with wallets but no gas</strong> to use them</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-start space-x-4">
+                <div className="w-6 h-6 bg-green-500 rounded-full flex-shrink-0 mt-1 flex items-center justify-center">
+                  <div className="w-2 h-2 bg-white rounded-full"></div>
+                </div>
+                <p>
+                  <strong>Web2 UX meets Web3 power.</strong> We combine Web2 UX, Smart Contract recovery logic, and sponsor gas — making SentryWallet ideal for onboarding non-technical users to Web3.
+                </p>
+              </div>
+
+              <div className="bg-primary/10 rounded-2xl p-6 mt-8">
+                <p className="text-accent font-medium text-center">
+                  <strong>This is why wallets like MetaMask haven't fully solved the mainstream adoption problem</strong> — they rely on seed phrases and gas payments. <span className="text-primary font-bold">SentryWallet fixes both.</span>
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </motion.div>
+
       {/* Features Section */}
       <motion.div 
         className="py-20 px-4 max-w-6xl mx-auto"
