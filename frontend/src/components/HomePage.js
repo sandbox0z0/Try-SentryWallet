@@ -73,10 +73,17 @@ const HomePage = () => {
           </motion.div>
 
           <motion.p 
-            className="text-xl md:text-2xl text-gray-600 mb-8 font-medium"
+            className="text-xl md:text-2xl text-gray-600 mb-4 font-medium"
             variants={itemVariants}
           >
             Social recovery. Web2 login. Gasless UX — powered by BlockDAG.
+          </motion.p>
+
+          <motion.p 
+            className="text-lg text-gray-700 mb-8 max-w-4xl mx-auto leading-relaxed"
+            variants={itemVariants}
+          >
+            SentryWallet is a smart, recoverable crypto wallet that uses Web2 login, social guardians, and gasless transactions — built on BlockDAG.
           </motion.p>
 
           <motion.button
