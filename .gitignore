@@ -45,6 +45,7 @@ dump.rdb
 # System files
 .DS_Store
 *.pem
+.gitconfig
 
 # Python
 __pycache__/
@@ -77,4 +78,4 @@ agenthub/agents/youtube/db
 .cache/
 
 # Mobile development
-android-sdk/ 
+android-sdk/
