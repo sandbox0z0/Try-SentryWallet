@@ -37,9 +37,9 @@ const SendTransaction = ({ wallet, onTransactionSuccess }) => {
       
       await transaction.wait();
 
-      // Notify parent component of success
+      // Notify parent component of success with transaction hash
       if (onTransactionSuccess) {
-        onTransactionSuccess();
+        onTransactionSuccess(transaction.hash);
       }
 
       // Reset form
