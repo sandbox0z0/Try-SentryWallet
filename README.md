@@ -1,223 +1,130 @@
-# 🛡️ SentryWallet
+# SentryWallet: The Smart Wallet You Can't Lose
 
-<div align="center">
+## 💡 Inspiration
 
-**A lightweight and intuitive browser-based wallet interface for interacting with decentralized applications (dApps)**
+In the world of Web3, two major hurdles prevent mainstream adoption:
 
-[![Live Preview](https://img.shields.io/badge/🌐_Live_Preview-Visit_App-blue?style=for-the-badge)](https://sentrywallet.vercel.app/)
-[![GitHub Repository](https://img.shields.io/badge/📦_GitHub-Repository-black?style=for-the-badge)](https://github.com/ghatak0982/SentryWallet)
+1.  **Seed Phrase Management:** Users constantly fear losing their seed phrases, which can lead to irreversible loss of funds.
+2.  **Gas Fees:** The need to acquire and manage native tokens for transaction fees (gas) creates a significant barrier to entry for new users.
 
-Built with **React** • **Supabase** • **Tailwind CSS** • **CRACO**
+SentryWallet was born from the idea of solving these problems by combining the best of Web2 user experience with the power and security of Web3, all powered by the innovative BlockDAG network.
 
-</div>
+## ✨ What it Does
 
----
+SentryWallet is a smart, recoverable crypto wallet designed for the everyday user. It offers:
 
-## ✨ Features
+*   **Web2 Login (Supabase Auth):** Users can sign in seamlessly using familiar Web2 methods (e.g., Google, email/password) via Supabase, eliminating the need for complex seed phrases.
+*   **Social Recovery (On-chain Inheritance):** Our unique feature allows users to designate trusted nominees (friends, family) on-chain. In the event of a recovery, these nominees can claim a pre-defined share of the wallet's funds, acting as a digital will.
+*   **Gasless Transactions (BlockDAG):** Built on the BlockDAG testnet, SentryWallet leverages its high throughput and low fees. Future iterations will implement meta-transactions to abstract away gas fees entirely, providing a truly gasless user experience.
+*   **Secure Wallet Management:** Wallets are generated client-side, encrypted with a user-defined password, and securely stored in the user's Supabase profile.
 
-<table>
-<tr>
-<td>🔐</td>
-<td><strong>Secure Authentication</strong><br/>Supabase authentication with seamless Google login integration</td>
-</tr>
-<tr>
-<td>🎨</td>
-<td><strong>Modern UI Design</strong><br/>Clean interface inspired by MetaMask with Tailwind CSS styling</td>
-</tr>
-<tr>
-<td>⚡</td>
-<td><strong>Fast & Responsive</strong><br/>Built with Create React App (CRA) and CRACO for optimal performance</td>
-</tr>
-<tr>
-<td>🧩</td>
-<td><strong>Beautiful Icons</strong><br/>Lucide Icons for consistent and elegant visual elements</td>
-</tr>
-<tr>
-<td>🌍</td>
-<td><strong>Multi-page Navigation</strong><br/>React Router DOM for smooth page transitions</td>
-</tr>
-<tr>
-<td>💨</td>
-<td><strong>Smooth Animations</strong><br/>Framer Motion for delightful user interactions</td>
-</tr>
-<tr>
-<td>🧠</td>
-<td><strong>Session Management</strong><br/>Intelligent Supabase session handling and secure token storage</td>
-</tr>
-</table>
+## 🚀 How We Built It
 
----
+SentryWallet is a full-stack application built with a modern and robust technology stack:
 
-## 🚀 Quick Start
+### Frontend
+*   **React.js:** For a dynamic and responsive user interface.
+*   **Tailwind CSS:** For rapid and consistent styling.
+*   **Framer Motion:** For smooth and engaging animations.
+*   **Ethers.js:** For seamless interaction with the BlockDAG blockchain.
+*   **Supabase:** Our Backend-as-a-Service (BaaS) for user authentication and secure storage of encrypted wallet data and off-chain nominee information.
 
-### 📋 Prerequisites
+### Smart Contract
+*   **Solidity:** The `SentryInheritance.sol` smart contract is the core of our social recovery feature, deployed on the BlockDAG testnet. It manages nominee shares and the fund claiming process.
 
-Before you begin, ensure you have:
+## ⚙️ Setup and Installation
 
-- **Node.js** `≥ 16.x` installed
-- **Yarn** or **npm** package manager
-- **Supabase project** with credentials ready
+To run SentryWallet locally, follow these steps:
 
-### 🔧 Installation
+1.  **Clone the repository:**
+    ```bash
+    git clone <repository_url>
+    cd SentryWallet
+    ```
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/ghatak0982/SentryWallet.git
-   cd SentryWallet/frontend
-   ```
+2.  **Set up Supabase:**
+    *   Create a new project on [Supabase](https://supabase.com/).
+    *   Navigate to "Authentication" -> "Providers" and enable "Google" if you wish to use Google login.
+    *   Go to "SQL Editor" and run the following SQL script to set up your `profiles` table and RLS policies:
 
-2. **Install dependencies**
-   ```bash
-   # Using yarn (recommended)
-   yarn install
-   
-   # Or using npm
-   npm install
-   ```
+        ```sql
+        CREATE TABLE public.profiles (
+          id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+          encrypted_wallet TEXT,
+          created_at TIMESTAMPTZ DEFAULT NOW(),
+          nominee_email TEXT
+        );
 
-3. **Set up environment variables**
-   
-   Create a `.env.local` file in the frontend root:
-   ```env
-   NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
-   ```
+        COMMENT ON TABLE public.profiles IS 'Stores user profile information, including their encrypted wallet and nominee details.';
+        COMMENT ON COLUMN public.profiles.id IS 'Foreign key to auth.users.id.';
+        COMMENT ON COLUMN public.profiles.encrypted_wallet IS 'The user''s wallet, encrypted with their password as a JSON string.';
 
-4. **Configure Supabase**
-   - Enable Google authentication: `Authentication → Providers → Google`
-   - Add your redirect URL (e.g., `https://sentrywallet.vercel.app/`)
+        ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
-5. **Start development server**
-   ```bash
-   yarn start
-   # or
-   npm start
-   ```
+        CREATE POLICY "Users can view their own profile."
+        ON public.profiles FOR SELECT
+        USING (auth.uid() = id);
 
----
+        CREATE POLICY "Users can insert their own profile."
+        ON public.profiles FOR INSERT
+        WITH CHECK (auth.uid() = id);
 
-## 📜 Available Scripts
+        CREATE POLICY "Users can update their own profile."
+        ON public.profiles FOR UPDATE
+        USING (auth.uid() = id);
 
-<div align="center">
+        CREATE OR REPLACE FUNCTION public.handle_new_user()
+        RETURNS TRIGGER
+        LANGUAGE plpgsql
+        SECURITY DEFINER SET search_path = public
+        AS $$
+        BEGIN
+          INSERT INTO public.profiles (id)
+          VALUES (new.id);
+          RETURN new;
+        END;
+        $$;
 
-| Command | Description |
-|---------|-------------|
-| `yarn start` | 🚀 Run development server at `http://localhost:3000` |
-| `yarn build` | 📦 Build optimized production bundle |
-| `yarn test` | 🧪 Launch interactive test runner |
-| `yarn eject` | ⚠️ Expose build configuration (irreversible) |
+        CREATE TRIGGER on_auth_user_created
+          AFTER INSERT ON auth.users
+          FOR EACH ROW EXECUTE PROCEDURE public.handle_new_user();
+        ```
 
-</div>
+3.  **Deploy the Smart Contract:**
+    *   Compile and deploy the `SentryInheritance.sol` contract (found in `frontend/src/contracts/SentryInheritance.sol`) to the BlockDAG testnet using Remix or your preferred deployment tool.
+    *   **Important:** Note down the deployed contract address and its ABI.
 
----
+4.  **Configure Environment Variables:**
+    *   Create a `.env.local` file in the `frontend/` directory.
+    *   Add your Supabase and deployed contract details:
+        ```
+        REACT_APP_SUPABASE_URL=YOUR_SUPABASE_URL
+        REACT_APP_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
+        REACT_APP_BLOCKDAG_RPC_URL=https://rpc.primordial.bdagscan.com # Or your preferred BlockDAG RPC
+        REACT_APP_INHERITANCE_CONTRACT_ADDRESS=YOUR_DEPLOYED_CONTRACT_ADDRESS
+        ```
 
-## 🛠️ Tech Stack
+5.  **Install Dependencies and Run:**
+    ```bash
+    cd frontend
+    yarn install
+    yarn start
+    ```
+    The application will open in your browser, usually at `http://localhost:3000`.
 
-<div align="center">
+## 🛣️ Future Enhancements
 
-| Frontend | Backend & Auth | Styling | Tools |
-|----------|----------------|---------|-------|
-| ![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react) | ![Supabase](https://img.shields.io/badge/Supabase-v2-3ECF8E?style=flat-square&logo=supabase) | ![Tailwind](https://img.shields.io/badge/Tailwind-3.0-06B6D4?style=flat-square&logo=tailwindcss) | ![CRACO](https://img.shields.io/badge/CRACO-Latest-FF6B6B?style=flat-square) |
-| ![React Router](https://img.shields.io/badge/React_Router-7-CA4245?style=flat-square&logo=reactrouter) | | ![Lucide](https://img.shields.io/badge/Lucide_Icons-Latest-000000?style=flat-square) | ![Framer Motion](https://img.shields.io/badge/Framer_Motion-Latest-0055FF?style=flat-square&logo=framer) |
-
-</div>
-
----
-
-## 📁 Project Structure
-
-```
-SentryWallet/
-├── 📁 frontend/
-│   ├── 📁 public/
-│   ├── 📁 src/
-│   │   ├── 📁 components/
-│   │   ├── 📁 pages/
-│   │   ├── 📁 utils/
-│   │   └── 📄 App.js
-│   ├── 📄 package.json
-│   ├── 📄 craco.config.js
-│   └── 📄 tailwind.config.js
-├── 📄 README.md
-└── 📄 LICENSE
-```
-
----
-
-## 🚀 Deployment
-
-### Deploy with Vercel (Recommended)
-
-1. **Fork/Clone** the repository
-2. **Connect** to Vercel and set project root as `frontend`
-3. **Configure** build settings:
-   - **Build Command:** `yarn build`
-   - **Output Directory:** `build`
-4. **Add environment variables** in Vercel project settings
-5. **Deploy** 🎉
-
-### Deploy with Netlify
-
-1. **Build** the project: `yarn build`
-2. **Upload** the `build` folder to Netlify
-3. **Configure** environment variables
-4. **Set** redirects for React Router
-
----
-
-## ⚠️ Troubleshooting
-
-<details>
-<summary><strong>🔧 Authentication Issues</strong></summary>
-
-- Verify Google OAuth is enabled in Supabase
-- Check redirect URLs match your deployment URL
-- Ensure environment variables are correctly set
-- Redeploy after configuration changes
-
-</details>
-
-<details>
-<summary><strong>🌐 Build/Deployment Issues</strong></summary>
-
-- Clear node_modules and reinstall dependencies
-- Check Node.js version compatibility
-- Verify all environment variables are set
-- Check build logs for specific error messages
-
-</details>
-
----
-
-## 📚 Resources & Documentation
-
-<div align="center">
-
-| Resource | Link |
-|----------|------|
-| 📖 **Supabase Docs** | [supabase.com/docs](https://supabase.com/docs) |
-| ⚛️ **React Documentation** | [reactjs.org/docs](https://reactjs.org/docs) |
-| 🏗️ **Create React App** | [create-react-app.dev/docs](https://create-react-app.dev/docs) |
-| 🎨 **Tailwind CSS** | [tailwindcss.com/docs](https://tailwindcss.com/docs) |
-| 🔧 **CRACO** | [github.com/dilanx/craco](https://github.com/dilanx/craco) |
-
-</div>
-
----
+*   **Meta-transactions for Gasless UX:** Implement a relayer network to sponsor gas fees, making transactions truly gasless for the end-user.
+*   **Advanced Social Recovery:** Introduce multi-signature recovery, time-locks, and more sophisticated guardian management.
+*   **Nominee Claim UI:** Develop a dedicated interface for nominees to claim their inheritance after a recovery event.
+*   **Transaction History:** Integrate with a BlockDAG explorer API to display a comprehensive transaction history within the wallet.
+*   **Multi-chain Support:** Extend compatibility to other EVM-compatible chains.
+*   **Mobile Application:** Develop native mobile applications for iOS and Android.
 
 ## 🤝 Contributing
 
-We welcome contributions! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+We welcome contributions! Please feel free to fork the repository, open issues, or submit pull requests.
 
-1. **Fork** the project
-2. **Create** your feature branch (`git checkout -b feature/AmazingFeature`)
-3. **Commit** your changes (`git commit -m 'Add some AmazingFeature'`)
-4. **Push** to the branch (`git push origin feature/AmazingFeature`)
-5. **Open** a Pull Request
+## 📄 License
 
-
-<sub>Built with ❤️ by [ghatak0982 and team](https://github.com/ghatak0982)</sub>
-
-**⭐ Star this repo if you find it helpful!**
-
-</div>
+This project is licensed under the MIT License.
