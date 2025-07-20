@@ -96,10 +96,15 @@ const WalletManager = ({ user, onWalletUnlocked, onBack }) => {
   }
 
   // Render Success State
-  if (decryptedWallet) {
-    const provider = new ethers.providers.JsonRpcProvider("https://rpc.primordial.bdagscan.com");
+  if (decryptedWallet && !onWalletUnlocked) {
+    const provider = new ethers.providers.JsonRpcProvider(process.env.REACT_APP_BLOCKDAG_RPC_URL);
     const connectedWallet = decryptedWallet.connect(provider);
     return <WalletDashboard wallet={connectedWallet} />;
+  }
+
+  // If onWalletUnlocked is provided, don't render WalletDashboard here
+  if (decryptedWallet && onWalletUnlocked) {
+    return null; // The parent component will handle the wallet
   }
 
   // Common Form Styling
