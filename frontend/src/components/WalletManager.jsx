@@ -57,6 +57,9 @@ const WalletManager = ({ user, onWalletUnlocked, onBack }) => {
     try {
       const wallet = await createAndSaveWallet(password, user.id);
       setDecryptedWallet(wallet);
+      if (onWalletUnlocked) {
+        onWalletUnlocked(wallet);
+      }
     } catch (err) {
       setError(err.message || 'Failed to create wallet.');
     } finally {
@@ -72,6 +75,9 @@ const WalletManager = ({ user, onWalletUnlocked, onBack }) => {
     try {
       const wallet = await loadAndDecryptWallet(password, user.id);
       setDecryptedWallet(wallet);
+      if (onWalletUnlocked) {
+        onWalletUnlocked(wallet);
+      }
     } catch (err) {
       setError('Incorrect password or failed to decrypt wallet.');
     } finally {
