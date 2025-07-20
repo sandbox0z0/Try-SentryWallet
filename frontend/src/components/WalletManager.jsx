@@ -10,7 +10,7 @@ import {
 } from '../utils/wallet';
 import WalletDashboard from './WalletDashboard';
 
-const WalletManager = ({ user, onBack }) => {
+const WalletManager = ({ user, onWalletUnlocked, onBack }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [hasWallet, setHasWallet] = useState(null);
   const [password, setPassword] = useState('');
