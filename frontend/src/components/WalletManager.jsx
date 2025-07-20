@@ -196,12 +196,14 @@ const WalletManager = ({ user, onWalletUnlocked, onBack }) => {
           </form>
           
           <div className="mt-6 text-center">
-            <button
-              onClick={onBack}
-              className="text-sm text-gray-600 hover:text-primary transition-colors"
-            >
-              Back to Dashboard
-            </button>
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="text-sm text-gray-600 hover:text-primary transition-colors"
+              >
+                Back to Dashboard
+              </button>
+            )}
           </div>
         </div>
       </motion.div>
