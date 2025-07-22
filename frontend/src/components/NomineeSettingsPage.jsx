@@ -13,21 +13,21 @@ import {
   Send
 } from 'lucide-react';
 import WalletManager from './WalletManager';
-import { getInheritanceContract, isValidAddress, getSigner } from '../utils/blockdag';
+import { useWeb3 } from '../context/Web3Context';
 import { supabase } from '../utils/wallet';
 import { useOutletContext } from 'react-router-dom';
 
 const NomineeSettingsPage = () => {
   const { user } = useOutletContext();
-  const [signer, setSigner] = useState(null);
-  const [showWalletManager, setShowWalletManager] = useState(true);
+  const { signer, isAuthenticated, getInheritanceContract } = useWeb3();
+  const [showWalletManager, setShowWalletManager] = useState(false);
   
   const [nomineeEmail, setNomineeEmail] = useState('');
   const [nomineeAddress, setNomineeAddress] = useState('');
   const [sharePercentage, setSharePercentage] = useState('');
   const [fundAmount, setFundAmount] = useState('');
   
-  const [currentNominee, setCurrentNominee] = useState(null);
+  const [currentNomineeData, setCurrentNomineeData] = useState(null);
   const [contractBalance, setContractBalance] = useState('0');
   
   const [isLoading, setIsLoading] = useState(true);
@@ -37,66 +37,127 @@ const NomineeSettingsPage = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const handleWalletUnlocked = (unlockedWallet) => {
-    const signerInstance = getSigner(unlockedWallet.privateKey);
-    setSigner(signerInstance);
+  const handleWalletUnlocked = (wallet, signerInstance) => {
+    console.log("🔑 Wallet unlocked in NomineeSettingsPage");
     setShowWalletManager(false);
   };
 
-  const fetchData = useCallback(async () => {
-    if (!signer) return;
+  const fetchNomineeData = useCallback(async () => {
+    if (!signer || !user) return;
 
     setIsLoading(true);
     setError('');
 
     try {
-      const contract = getInheritanceContract(signer);
-      const { data: profileData } = await supabase
+      console.log("📋 Fetching nominee data...");
+      
+      // Fetch nominee data from Supabase JSONB column
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
-        .select('nominee_email')
+        .select('nominee_email, nominee_data')
         .eq('id', user.id)
         .single();
+
+      if (profileError && profileError.code !== 'PGRST116') {
+        throw profileError;
+      }
+
+      let nomineeData = null;
       
-      if (profileData?.nominee_email) {
-        setNomineeEmail(profileData.nominee_email);
+      if (profileData) {
+        // Set the nominee email
+        if (profileData.nominee_email) {
+          setNomineeEmail(profileData.nominee_email);
+        }
+
+        // Parse nominee data from JSONB column
+        if (profileData.nominee_data) {
+          try {
+            nomineeData = typeof profileData.nominee_data === 'string' 
+              ? JSON.parse(profileData.nominee_data) 
+              : profileData.nominee_data;
+          } catch (e) {
+            console.warn("Failed to parse nominee_data:", e);
+          }
+        }
       }
 
-      const share = await contract.nominees(signer.address);
-      if (share.gt(0)) {
-        setCurrentNominee({
-          address: nomineeAddress, 
-          share: share.toString()
-        });
-        setSharePercentage(share.toString());
+      // If we have nominee data, verify it on-chain
+      if (nomineeData?.address && nomineeData.share) {
+        try {
+          const contract = getInheritanceContract();
+          
+          // Check if the nominee still exists on-chain
+          const onChainShare = await contract.nominees(nomineeData.address);
+          
+          if (onChainShare.gt(0)) {
+            setCurrentNomineeData({
+              address: nomineeData.address,
+              email: nomineeData.email || '',
+              share: onChainShare.toString()
+            });
+            setNomineeAddress(nomineeData.address);
+            setSharePercentage(onChainShare.toString());
+            console.log("✅ On-chain nominee verified:", nomineeData.address);
+          } else {
+            // Nominee was removed from contract but still in database
+            console.log("⚠️ Nominee in database but not on-chain, cleaning up...");
+            await cleanupNomineeData();
+          }
+        } catch (contractError) {
+          console.error("Contract call failed:", contractError);
+          setError('Could not verify nominee on blockchain: ' + contractError.message);
+        }
       }
 
-      const balance = await signer.provider.getBalance(contract.address);
-      setContractBalance(ethers.utils.formatEther(balance));
+      // Fetch contract balance
+      try {
+        const contract = getInheritanceContract();
+        const balance = await signer.provider.getBalance(contract.address);
+        setContractBalance(ethers.utils.formatEther(balance));
+      } catch (balanceError) {
+        console.error("Failed to fetch contract balance:", balanceError);
+      }
 
     } catch (err) {
-      setError('Could not fetch nominee information: ' + (err.reason || err.message));
-      console.error("Error fetching data:", err);
+      setError('Could not fetch nominee information: ' + (err.message || 'Unknown error'));
+      console.error("Error fetching nominee data:", err);
     } finally {
       setIsLoading(false);
     }
-  }, [signer, user, nomineeAddress]);
+  }, [signer, user, getInheritanceContract]);
+
+  // Clean up nominee data when it's not on-chain anymore
+  const cleanupNomineeData = async () => {
+    try {
+      await supabase
+        .from('profiles')
+        .update({ nominee_data: null })
+        .eq('id', user.id);
+      
+      setCurrentNomineeData(null);
+      setNomineeAddress('');
+      setSharePercentage('');
+    } catch (e) {
+      console.error("Failed to cleanup nominee data:", e);
+    }
+  };
 
   useEffect(() => {
-    if (signer) {
-      fetchData();
+    if (signer && isAuthenticated) {
+      fetchNomineeData();
     }
-  }, [signer, fetchData]);
+  }, [signer, isAuthenticated, fetchNomineeData]);
 
   const handleSaveNominee = async (e) => {
     e.preventDefault();
     if (!signer) return;
 
-    const contract = getInheritanceContract(signer);
     setIsSaving(true);
     setError('');
     setSuccess('');
 
-    if (!isValidAddress(nomineeAddress)) {
+    if (!ethers.utils.isAddress(nomineeAddress)) {
       setError('Invalid nominee BlockDAG address.');
       setIsSaving(false);
       return;
@@ -109,20 +170,58 @@ const NomineeSettingsPage = () => {
       return;
     }
 
+    if (!nomineeEmail) {
+      setError('Nominee email is required.');
+      setIsSaving(false);
+      return;
+    }
+
     try {
-      await supabase
+      console.log("💾 Saving nominee:", { nomineeAddress, share, nomineeEmail });
+      
+      // First, set nominee on-chain
+      const contract = getInheritanceContract();
+      const tx = await contract.setNominee(nomineeAddress, share);
+      
+      console.log("⏳ Waiting for blockchain confirmation...");
+      await tx.wait();
+      console.log("✅ Nominee set on-chain successfully");
+
+      // Then save nominee data to Supabase JSONB column
+      const nomineeData = {
+        address: nomineeAddress,
+        email: nomineeEmail,
+        share: share,
+        createdAt: new Date().toISOString()
+      };
+
+      const { error: supabaseError } = await supabase
         .from('profiles')
-        .update({ nominee_email: nomineeEmail })
+        .update({ 
+          nominee_email: nomineeEmail,
+          nominee_data: nomineeData
+        })
         .eq('id', user.id);
 
-      const tx = await contract.setNominee(nomineeAddress, share);
-      await tx.wait();
+      if (supabaseError) {
+        throw supabaseError;
+      }
 
-      setCurrentNominee({ address: nomineeAddress, share: sharePercentage });
-      setSuccess('Nominee saved successfully on-chain and off-chain!');
+      console.log("✅ Nominee data saved to Supabase");
+
+      setCurrentNomineeData({
+        address: nomineeAddress,
+        email: nomineeEmail,
+        share: sharePercentage
+      });
       
-      await fetchData();
+      setSuccess('Nominee saved successfully on-chain and in database!');
+      
+      // Refresh data
+      await fetchNomineeData();
+      
     } catch (err) {
+      console.error("Error saving nominee:", err);
       setError(err.reason || err.message || 'Failed to save nominee. Please try again.');
     } finally {
       setIsSaving(false);
@@ -133,24 +232,32 @@ const NomineeSettingsPage = () => {
     e.preventDefault();
     if (!signer || !fundAmount) return;
 
-    const contract = getInheritanceContract(signer);
     setIsFunding(true);
     setError('');
     setSuccess('');
 
     try {
+      const contract = getInheritanceContract();
       const amount = ethers.utils.parseEther(fundAmount);
+      
+      console.log("💰 Funding contract with:", fundAmount, "tBDAG");
+      
       const tx = await signer.sendTransaction({
         to: contract.address,
         value: amount
       });
       
+      console.log("⏳ Waiting for funding transaction...");
       await tx.wait();
+      
       setSuccess(`Successfully sent ${fundAmount} tBDAG to inheritance contract!`);
       setFundAmount('');
       
-      await fetchData();
+      // Refresh contract balance
+      await fetchNomineeData();
+      
     } catch (err) {
+      console.error("Funding failed:", err);
       setError('Failed to fund contract: ' + (err.reason || err.message));
     } finally {
       setIsFunding(false);
@@ -158,36 +265,47 @@ const NomineeSettingsPage = () => {
   };
 
   const handleRemoveNominee = async () => {
-    if (!signer) return;
+    if (!signer || !currentNomineeData) return;
 
-    const contract = getInheritanceContract(signer);
     setIsRemoving(true);
     setError('');
     setSuccess('');
 
     try {
-      if (!isValidAddress(nomineeAddress)) {
-        setError('Nominee address to remove is not specified or invalid.');
-        setIsRemoving(false);
-        return;
-      }
-      const tx = await contract.removeNominee(nomineeAddress);
-      await tx.wait();
-
-      setCurrentNominee(null);
-      setNomineeAddress('');
-      setSharePercentage('');
-      setSuccess('Nominee removed successfully from the contract!');
+      console.log("🗑️ Removing nominee:", currentNomineeData.address);
       
-      await fetchData();
+      const contract = getInheritanceContract();
+      const tx = await contract.removeNominee(currentNomineeData.address);
+      
+      console.log("⏳ Waiting for removal transaction...");
+      await tx.wait();
+      
+      console.log("✅ Nominee removed from contract");
+
+      // Clean up database
+      await supabase
+        .from('profiles')
+        .update({ nominee_data: null })
+        .eq('id', user.id);
+
+      setCurrentNomineeData(null);
+      setNomineeAddress('');
+      setNomineeEmail('');
+      setSharePercentage('');
+      setSuccess('Nominee removed successfully from contract and database!');
+      
+      // Refresh data
+      await fetchNomineeData();
+      
     } catch (err) {
+      console.error("Remove failed:", err);
       setError('Failed to remove nominee: ' + (err.reason || err.message));
     } finally {
       setIsRemoving(false);
     }
   };
 
-  if (showWalletManager || !signer) {
+  if (showWalletManager || !isAuthenticated || !signer) {
     return (
       <WalletManager 
         user={user} 
@@ -258,7 +376,9 @@ const NomineeSettingsPage = () => {
       )}
 
       <div className="grid lg:grid-cols-2 gap-8">
+        {/* Left Column */}
         <div className="space-y-8">
+          {/* Current Status */}
           <motion.div
             className="neumorphic rounded-3xl p-6"
             initial={{ opacity: 0, x: -20 }}
@@ -280,14 +400,22 @@ const NomineeSettingsPage = () => {
                 </p>
               </div>
 
-              {currentNominee ? (
+              {currentNomineeData ? (
                 <div className="space-y-3">
                   <div className="p-4 bg-green-50 rounded-xl">
                     <label className="block text-sm font-medium text-gray-600 mb-1">
-                      Active Nominee Address
+                      Nominee Email
+                    </label>
+                    <p className="text-accent font-medium break-all">
+                      {currentNomineeData.email}
+                    </p>
+                  </div>
+                  <div className="p-4 bg-green-50 rounded-xl">
+                    <label className="block text-sm font-medium text-gray-600 mb-1">
+                      Nominee Address
                     </label>
                     <p className="text-accent font-medium font-mono text-sm break-all">
-                      {currentNominee.address}
+                      {currentNomineeData.address}
                     </p>
                   </div>
                   <div className="p-4 bg-green-50 rounded-xl">
@@ -295,7 +423,7 @@ const NomineeSettingsPage = () => {
                       Share Percentage
                     </label>
                     <p className="text-accent font-bold text-lg">
-                      {currentNominee.share}%
+                      {currentNomineeData.share}%
                     </p>
                   </div>
                   
@@ -325,6 +453,7 @@ const NomineeSettingsPage = () => {
             </div>
           </motion.div>
 
+          {/* Fund Contract */}
           <motion.div
             className="neumorphic rounded-3xl p-6"
             initial={{ opacity: 0, x: -20 }}
@@ -374,6 +503,7 @@ const NomineeSettingsPage = () => {
           </motion.div>
         </div>
 
+        {/* Right Column - Set Nominee */}
         <div>
           <motion.div
             className="neumorphic rounded-3xl p-6"
@@ -459,6 +589,7 @@ const NomineeSettingsPage = () => {
         </div>
       </div>
 
+      {/* Contract Info */}
       <motion.div
         className="mt-8 text-center py-6 bg-gradient-to-r from-accent/5 to-primary/5 rounded-3xl border border-accent/10"
         initial={{ opacity: 0 }}
@@ -469,7 +600,7 @@ const NomineeSettingsPage = () => {
           SentryInheritance Smart Contract
         </h3>
         <p className="text-gray-600 font-mono text-sm break-all">
-          {getInheritanceContract(signer)?.address}
+          {process.env.REACT_APP_INHERITANCE_CONTRACT_ADDRESS}
         </p>
         <p className="text-gray-500 text-sm mt-2">
           Deployed on BlockDAG Primordial Testnet
