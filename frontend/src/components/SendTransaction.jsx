@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { ethers } from 'ethers';
 import { motion } from 'framer-motion';
 import { Loader2, AlertCircle, Send } from 'lucide-react';
+import { useWeb3 } from '../context/Web3Context';
 
-const SendTransaction = ({ wallet, onTransactionSuccess }) => {
+const SendTransaction = ({ onTransactionSuccess }) => {
+  const { signer, refreshBalance } = useWeb3();
   const [toAddress, setToAddress] = useState('');
   const [amount, setAmount] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -12,6 +14,10 @@ const SendTransaction = ({ wallet, onTransactionSuccess }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!signer) {
+      setError('Wallet not connected. Please unlock your wallet first.');
+      return;
+    }
     if (!toAddress || !amount) {
       setError('Please fill in both fields.');
       return;
@@ -31,14 +37,20 @@ const SendTransaction = ({ wallet, onTransactionSuccess }) => {
         value: ethers.utils.parseEther(amount),
       };
 
-      const transaction = await wallet.sendTransaction(tx);
+      console.log("📤 Sending transaction:", tx);
+      const transaction = await signer.sendTransaction(tx);
       setTxHash(`Transaction sent! Hash: ${transaction.hash}`);
       
+      console.log("⏳ Waiting for transaction confirmation...");
       await transaction.wait();
+      console.log("✅ Transaction confirmed!");
+
+      // Refresh balance
+      await refreshBalance();
 
       // Notify parent component of success
       if (onTransactionSuccess) {
-        onTransactionSuccess();
+        onTransactionSuccess(transaction.hash);
       }
 
       // Reset form
@@ -47,7 +59,8 @@ const SendTransaction = ({ wallet, onTransactionSuccess }) => {
 
     } catch (err) {
       console.error("Transaction failed:", err);
-      setError(err.reason || 'Transaction failed.');
+      const errorMessage = err.reason || err.message || 'Transaction failed.';
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
