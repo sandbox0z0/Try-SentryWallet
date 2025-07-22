@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { ethers } from 'ethers';
 import { motion } from 'framer-motion';
@@ -37,9 +36,9 @@ const SendTransaction = ({ wallet, onTransactionSuccess }) => {
       
       await transaction.wait();
 
-      // Notify parent component of success with transaction hash
+      // Notify parent component of success
       if (onTransactionSuccess) {
-        onTransactionSuccess(transaction.hash);
+        onTransactionSuccess();
       }
 
       // Reset form

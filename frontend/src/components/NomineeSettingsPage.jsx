@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { ethers } from 'ethers';
 import { 
@@ -10,92 +9,68 @@ import {
   AlertCircle, 
   CheckCircle,
   Eye,
-  EyeOff,
   Trash2,
   Send
 } from 'lucide-react';
 import WalletManager from './WalletManager';
-import SentryInheritanceABI from '../contracts/SentryInheritance.json';
-
-const CONTRACT_ADDRESS = process.env.REACT_APP_INHERITANCE_CONTRACT_ADDRESS;
+import { getInheritanceContract, isValidAddress, getSigner } from '../utils/blockdag';
+import { supabase } from '../utils/wallet';
+import { useOutletContext } from 'react-router-dom';
 
 const NomineeSettingsPage = () => {
   const { user } = useOutletContext();
-  const [wallet, setWallet] = useState(null);
-  const [showWalletManager, setShowWalletManager] = useState(false);
+  const [signer, setSigner] = useState(null);
+  const [showWalletManager, setShowWalletManager] = useState(true);
   
-  // Form states
   const [nomineeEmail, setNomineeEmail] = useState('');
   const [nomineeAddress, setNomineeAddress] = useState('');
   const [sharePercentage, setSharePercentage] = useState('');
   const [fundAmount, setFundAmount] = useState('');
   
-  // On-chain data states
   const [currentNominee, setCurrentNominee] = useState(null);
   const [contractBalance, setContractBalance] = useState('0');
   
-  // UI states
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isFunding, setIsFunding] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-
-  const inheritanceContract = wallet ? new ethers.Contract(CONTRACT_ADDRESS, SentryInheritanceABI, wallet) : null;
-
-  useEffect(() => {
-    if (wallet && CONTRACT_ADDRESS) {
-      fetchData();
-    }
-  }, [wallet]);
 
   const handleWalletUnlocked = (unlockedWallet) => {
-    const provider = new ethers.providers.JsonRpcProvider(process.env.REACT_APP_BLOCKDAG_RPC_URL);
-    const connectedWallet = unlockedWallet.connect(provider);
-    setWallet(connectedWallet);
+    const signerInstance = getSigner(unlockedWallet.privateKey);
+    setSigner(signerInstance);
     setShowWalletManager(false);
   };
 
-  const fetchData = async () => {
-    if (!wallet || !inheritanceContract) return;
+  const fetchData = useCallback(async () => {
+    if (!signer) return;
 
     setIsLoading(true);
     setError('');
 
     try {
-      // Fetch off-chain nominee email from Supabase
-      const { supabase } = await import('../utils/wallet');
-      const { data: profileData, error: profileError } = await supabase
+      const contract = getInheritanceContract(signer);
+      const { data: profileData } = await supabase
         .from('profiles')
         .select('nominee_email')
         .eq('id', user.id)
         .single();
-
-      if (profileError && profileError.code !== 'PGRST116') {
-        console.warn('Profile error:', profileError);
-      }
       
       if (profileData?.nominee_email) {
         setNomineeEmail(profileData.nominee_email);
       }
 
-      // Fetch on-chain nominee data
-      const [nomineeAddr, share] = await inheritanceContract.getOwnerNominee(wallet.address);
-      
-      if (nomineeAddr !== ethers.constants.AddressZero) {
+      const share = await contract.nominees(signer.address);
+      if (share.gt(0)) {
         setCurrentNominee({
-          address: nomineeAddr,
+          address: nomineeAddress, 
           share: share.toString()
         });
-        setNomineeAddress(nomineeAddr);
         setSharePercentage(share.toString());
       }
 
-      // Fetch contract balance
-      const provider = wallet.provider;
-      const balance = await provider.getBalance(CONTRACT_ADDRESS);
+      const balance = await signer.provider.getBalance(contract.address);
       setContractBalance(ethers.utils.formatEther(balance));
 
     } catch (err) {
@@ -104,17 +79,24 @@ const NomineeSettingsPage = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [signer, user, nomineeAddress]);
+
+  useEffect(() => {
+    if (signer) {
+      fetchData();
+    }
+  }, [signer, fetchData]);
 
   const handleSaveNominee = async (e) => {
     e.preventDefault();
-    if (!inheritanceContract) return;
+    if (!signer) return;
 
+    const contract = getInheritanceContract(signer);
     setIsSaving(true);
     setError('');
     setSuccess('');
 
-    if (!ethers.utils.isAddress(nomineeAddress)) {
+    if (!isValidAddress(nomineeAddress)) {
       setError('Invalid nominee BlockDAG address.');
       setIsSaving(false);
       return;
@@ -128,25 +110,17 @@ const NomineeSettingsPage = () => {
     }
 
     try {
-      // Save off-chain email to Supabase
-      const { supabase } = await import('../utils/wallet');
-      const { error: supabaseError } = await supabase
+      await supabase
         .from('profiles')
         .update({ nominee_email: nomineeEmail })
         .eq('id', user.id);
 
-      if (supabaseError) {
-        throw new Error('Failed to save nominee email: ' + supabaseError.message);
-      }
-
-      // Save on-chain nominee
-      const tx = await inheritanceContract.setNominee(nomineeAddress, share);
+      const tx = await contract.setNominee(nomineeAddress, share);
       await tx.wait();
 
       setCurrentNominee({ address: nomineeAddress, share: sharePercentage });
       setSuccess('Nominee saved successfully on-chain and off-chain!');
       
-      // Refresh data
       await fetchData();
     } catch (err) {
       setError(err.reason || err.message || 'Failed to save nominee. Please try again.');
@@ -157,16 +131,17 @@ const NomineeSettingsPage = () => {
 
   const handleFundContract = async (e) => {
     e.preventDefault();
-    if (!wallet || !fundAmount) return;
+    if (!signer || !fundAmount) return;
 
+    const contract = getInheritanceContract(signer);
     setIsFunding(true);
     setError('');
     setSuccess('');
 
     try {
       const amount = ethers.utils.parseEther(fundAmount);
-      const tx = await wallet.sendTransaction({
-        to: CONTRACT_ADDRESS,
+      const tx = await signer.sendTransaction({
+        to: contract.address,
         value: amount
       });
       
@@ -174,7 +149,6 @@ const NomineeSettingsPage = () => {
       setSuccess(`Successfully sent ${fundAmount} tBDAG to inheritance contract!`);
       setFundAmount('');
       
-      // Refresh contract balance
       await fetchData();
     } catch (err) {
       setError('Failed to fund contract: ' + (err.reason || err.message));
@@ -184,14 +158,20 @@ const NomineeSettingsPage = () => {
   };
 
   const handleRemoveNominee = async () => {
-    if (!inheritanceContract) return;
+    if (!signer) return;
 
+    const contract = getInheritanceContract(signer);
     setIsRemoving(true);
     setError('');
     setSuccess('');
 
     try {
-      const tx = await inheritanceContract.removeNominee();
+      if (!isValidAddress(nomineeAddress)) {
+        setError('Nominee address to remove is not specified or invalid.');
+        setIsRemoving(false);
+        return;
+      }
+      const tx = await contract.removeNominee(nomineeAddress);
       await tx.wait();
 
       setCurrentNominee(null);
@@ -199,7 +179,6 @@ const NomineeSettingsPage = () => {
       setSharePercentage('');
       setSuccess('Nominee removed successfully from the contract!');
       
-      // Refresh data
       await fetchData();
     } catch (err) {
       setError('Failed to remove nominee: ' + (err.reason || err.message));
@@ -208,7 +187,7 @@ const NomineeSettingsPage = () => {
     }
   };
 
-  if (showWalletManager || !wallet) {
+  if (showWalletManager || !signer) {
     return (
       <WalletManager 
         user={user} 
@@ -229,7 +208,6 @@ const NomineeSettingsPage = () => {
 
   return (
     <div className="max-w-4xl mx-auto">
-      {/* Page Header */}
       <motion.div
         className="text-center mb-8"
         initial={{ opacity: 0, y: -20 }}
@@ -245,7 +223,6 @@ const NomineeSettingsPage = () => {
         </p>
       </motion.div>
 
-      {/* Status Messages */}
       {error && (
         <motion.div
           className="mb-6 bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded-2xl flex items-center"
@@ -281,9 +258,7 @@ const NomineeSettingsPage = () => {
       )}
 
       <div className="grid lg:grid-cols-2 gap-8">
-        {/* Left Column - Current Status & Fund Contract */}
         <div className="space-y-8">
-          {/* Current Nominee Status */}
           <motion.div
             className="neumorphic rounded-3xl p-6"
             initial={{ opacity: 0, x: -20 }}
@@ -350,7 +325,6 @@ const NomineeSettingsPage = () => {
             </div>
           </motion.div>
 
-          {/* Fund Contract */}
           <motion.div
             className="neumorphic rounded-3xl p-6"
             initial={{ opacity: 0, x: -20 }}
@@ -400,7 +374,6 @@ const NomineeSettingsPage = () => {
           </motion.div>
         </div>
 
-        {/* Right Column - Set Nominee */}
         <div>
           <motion.div
             className="neumorphic rounded-3xl p-6"
@@ -466,7 +439,7 @@ const NomineeSettingsPage = () => {
 
               <button
                 type="submit"
-                disabled={isSaving}
+                disabled={isSaving || !signer}
                 className="w-full flex items-center justify-center px-6 py-3 bg-accent text-white rounded-xl hover:bg-accent/90 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-300 font-medium"
               >
                 {isSaving ? (
@@ -486,7 +459,6 @@ const NomineeSettingsPage = () => {
         </div>
       </div>
 
-      {/* Contract Info */}
       <motion.div
         className="mt-8 text-center py-6 bg-gradient-to-r from-accent/5 to-primary/5 rounded-3xl border border-accent/10"
         initial={{ opacity: 0 }}
@@ -497,7 +469,7 @@ const NomineeSettingsPage = () => {
           SentryInheritance Smart Contract
         </h3>
         <p className="text-gray-600 font-mono text-sm break-all">
-          {CONTRACT_ADDRESS}
+          {getInheritanceContract(signer)?.address}
         </p>
         <p className="text-gray-500 text-sm mt-2">
           Deployed on BlockDAG Primordial Testnet
