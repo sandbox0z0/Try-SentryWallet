@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ethers } from 'ethers';
 import { Wallet, DollarSign, Send, Clock, RefreshCw, ExternalLink } from 'lucide-react';
 import WalletManager from './WalletManager';
 import WalletBalance from './WalletBalance';
 import SendTransaction from './SendTransaction';
+import { useWeb3 } from '../context/Web3Context';
 
 const WalletPage = () => {
   const { user } = useOutletContext();
-  const [wallet, setWallet] = useState(null);
+  const { signer, isAuthenticated, refreshBalance } = useWeb3();
   const [transactionCount, setTransactionCount] = useState(0);
   const [transactionHistory, setTransactionHistory] = useState([]);
   const [showWalletManager, setShowWalletManager] = useState(false);
@@ -22,11 +22,8 @@ const WalletPage = () => {
     }
   }, []);
 
-  const handleWalletUnlocked = (unlockedWallet) => {
-    // Connect wallet to BlockDAG RPC provider
-    const provider = new ethers.providers.JsonRpcProvider(process.env.REACT_APP_BLOCKDAG_RPC_URL);
-    const connectedWallet = unlockedWallet.connect(provider);
-    setWallet(connectedWallet);
+  const handleWalletUnlocked = (wallet, signerInstance) => {
+    console.log("🔑 Wallet unlocked in WalletPage");
     setShowWalletManager(false);
   };
 
@@ -47,11 +44,14 @@ const WalletPage = () => {
     sessionStorage.setItem('sentryWalletTransactionHistory', JSON.stringify(updatedHistory));
   };
 
-  const handleRefreshBalance = () => {
-    setTransactionCount(prev => prev + 1);
+  const handleRefreshBalance = async () => {
+    if (refreshBalance) {
+      await refreshBalance();
+      setTransactionCount(prev => prev + 1);
+    }
   };
 
-  if (showWalletManager || !wallet) {
+  if (showWalletManager || !isAuthenticated || !signer) {
     return (
       <WalletManager 
         user={user} 
@@ -75,7 +75,7 @@ const WalletPage = () => {
         </div>
         <h1 className="text-4xl font-bold text-accent mb-4">My Wallet</h1>
         <p className="text-gray-600 font-mono text-sm break-all bg-gray-100 rounded-lg p-3 max-w-2xl mx-auto">
-          {wallet.address}
+          {signer?.address}
         </p>
       </motion.div>
 
@@ -102,7 +102,7 @@ const WalletPage = () => {
                 <RefreshCw className="w-4 h-4" />
               </button>
             </div>
-            <WalletBalance wallet={wallet} transactionCount={transactionCount} />
+            <WalletBalance transactionCount={transactionCount} />
           </motion.div>
 
           {/* Send Transaction Section */}
@@ -116,7 +116,7 @@ const WalletPage = () => {
               <Send className="w-5 h-5 mr-2" />
               Send Transaction
             </h2>
-            <SendTransaction wallet={wallet} onTransactionSuccess={handleTransactionSuccess} />
+            <SendTransaction onTransactionSuccess={handleTransactionSuccess} />
           </motion.div>
         </div>
 
