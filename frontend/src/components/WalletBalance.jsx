@@ -1,38 +1,38 @@
 import React, { useState, useEffect } from 'react';
-import { ethers } from 'ethers';
 import { motion } from 'framer-motion';
 import { Loader2, AlertCircle } from 'lucide-react';
+import { useWeb3 } from '../context/Web3Context';
 
-const WalletBalance = ({ wallet, transactionCount }) => {
-  const [balance, setBalance] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState('');
+const WalletBalance = ({ transactionCount }) => {
+  const { balance, refreshBalance, signer, isLoading: web3Loading, error: web3Error } = useWeb3();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [localError, setLocalError] = useState('');
 
   useEffect(() => {
     const fetchBalance = async () => {
-      if (!wallet) return;
+      if (!signer) return;
 
-      setIsLoading(true);
-      setError('');
+      setIsRefreshing(true);
+      setLocalError('');
 
       try {
-        const balanceWei = await wallet.getBalance();
-        const balanceEther = ethers.utils.formatEther(balanceWei);
-        // Format to a reasonable number of decimal places for display
-        setBalance(parseFloat(balanceEther).toFixed(4));
+        await refreshBalance();
       } catch (err) {
         console.error("Error fetching balance:", err);
-        setError('Could not fetch balance.');
+        setLocalError('Could not fetch balance.');
       } finally {
-        setIsLoading(false);
+        setIsRefreshing(false);
       }
     };
 
     fetchBalance();
 
-  }, [wallet, transactionCount]);
+  }, [signer, transactionCount, refreshBalance]);
 
   const renderContent = () => {
+    const isLoading = web3Loading || isRefreshing;
+    const error = web3Error || localError;
+
     if (isLoading) {
       return (
         <div className="flex items-center justify-center">
@@ -53,7 +53,10 @@ const WalletBalance = ({ wallet, transactionCount }) => {
 
     return (
       <div className="text-center">
-        <p className="text-4xl font-bold text-accent">{balance} <span className="text-2xl font-medium text-gray-500">tBDAG</span></p>
+        <p className="text-4xl font-bold text-accent">
+          {balance ? parseFloat(balance).toFixed(4) : '0.0000'} 
+          <span className="text-2xl font-medium text-gray-500 ml-2">tBDAG</span>
+        </p>
       </div>
     );
   };
