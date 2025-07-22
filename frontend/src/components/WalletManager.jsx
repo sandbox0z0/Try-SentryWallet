@@ -19,7 +19,7 @@ const WalletManager = ({ user, onWalletUnlocked, onBack }) => {
   const [showPassword, setShowPassword] = useState(false);
 
   // For testing purposes - uncomment and add a test private key when needed
-  const TEST_PRIVATE_KEY = null; // "0x..." // Add test key here if needed
+  const TEST_PRIVATE_KEY = "0x4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318"; // Test key for BlockDAG testnet
 
   useEffect(() => {
     const checkWalletExists = async () => {
